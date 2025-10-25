@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>30x30 Grid with Side Numbers</title>
+  <style>
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #111;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 28px auto;
+      grid-template-rows: 22px auto;
+      gap: 6px;
+      align-items: start;
+      justify-items: start;
+    }
+    .top-labels {
+      grid-column: 2;
+      grid-row: 1;
+      display: grid;
+      grid-template-columns: repeat(30, 16px);
+      column-gap: 1px;
+      width: calc(30 * 16px + 29 * 1px);
+      height: 22px;
+    }
+    .left-labels {
+      grid-column: 1;
+      grid-row: 2;
+      display: grid;
+      grid-template-rows: repeat(30, 16px);
+      row-gap: 1px;
+      height: calc(30 * 16px + 29 * 1px);
+      width: 28px;
+    }
+    .label {
+      color: #9ca3af;
+      font-size: 11px;
+      text-align: center;
+      line-height: 16px;
+      user-select: none;
+    }
+    #app { grid-column: 2; grid-row: 2; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(30, 16px);
+      grid-template-rows: repeat(30, 16px);
+      gap: 1px; /* grid lines */
+      background: #0a0a0a; /* line color */
+      grid-auto-rows: 0;
+      grid-auto-columns: 0;
+      width: calc(30 * 16px + 29 * 1px);
+      height: calc(30 * 16px + 29 * 1px);
+      overflow: hidden;
+      position: relative; /* allow overlay counter */
+    }
+    .pixel {
+      width: 16px;
+      height: 16px;
+      background: #16a34a; /* green */
+    }
+    .pixel.red {
+      background: #dc2626; /* red */
+    }
+    .pixel.blue, .blue {
+      background: #2563eb; /* blue */
+    }
+    .counter {
+       position: absolute;
+       top: 4px;
+       left: 4px;
+       padding: 2px 6px;
+       font-size: 12px;
+       color: #e5e7eb;
+       background: rgba(0,0,0,0.5);
+       border-radius: 4px;
+       user-select: none;
+       pointer-events: none;
+     }
+     .score {
+       position: absolute;
+       top: 4px;
+       right: 4px;
+       padding: 2px 6px;
+       font-size: 12px;
+       color: #e5e7eb;
+       background: rgba(0,0,0,0.5);
+       border-radius: 4px;
+       user-select: none;
+       pointer-events: none;
+     }
+     .banner {
+       position: absolute;
+       top: 50%;
+       left: 50%;
+       transform: translate(-50%, -50%);
+       padding: 8px 12px;
+       font-size: 14px;
+       color: #e5e7eb;
+       background: rgba(0,0,0,0.7);
+       border-radius: 6px;
+       user-select: none;
+       pointer-events: none;
+       box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+     }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div class="top-labels" id="top-labels"></div>
+    <div class="left-labels" id="left-labels"></div>
+    <div id="app"></div>
+  </div>
+  <script>
+    // Create side labels (1..30) and a 30x30 grid with 5 random red pixels
+    const size = 30;
+    const total = size * size;
+
+    const topLabels = document.getElementById('top-labels');
+    const leftLabels = document.getElementById('left-labels');
+    for (let i = 1; i <= size; i++) {
+      const t = document.createElement('div');
+      t.className = 'label';
+      t.textContent = i;
+      topLabels.appendChild(t);
+
+      const l = document.createElement('div');
+      l.className = 'label';
+      l.textContent = i;
+      leftLabels.appendChild(l);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+
+    // Pick 50 unique random red indices (exclude initial blue cells)
+    const redCount = 50;
+    const redPositions = new Set();
+    const excluded = new Set([0, size]); // avoid blue at (1,1) and (2,1)
+    while (redPositions.size < redCount) {
+      const pick = Math.floor(Math.random() * total);
+      if (excluded.has(pick)) continue;
+      redPositions.add(pick);
+    }
+
+    // Build the base pixel grid and keep references
+    const cells = [];
+    for (let r = 1; r <= size; r++) {
+      for (let c = 1; c <= size; c++) {
+        const idx = (r - 1) * size + (c - 1);
+        const pixel = document.createElement('div');
+        pixel.className = redPositions.has(idx) ? 'pixel red' : 'pixel';
+        grid.appendChild(pixel);
+        cells.push(pixel);
+      }
+    }
+    // Safety: remove any extra pixel nodes beyond 30x30
+    const pixelNodes = grid.querySelectorAll('.pixel');
+    if (pixelNodes.length > total) {
+      for (let i = total; i < pixelNodes.length; i++) {
+        pixelNodes[i].remove();
+      }
+    }
+    const getCell = (r, c) => cells[(r - 1) * size + (c - 1)];
+    // Create move counter overlay inside the grid
+    const counterEl = document.createElement('div');
+    counterEl.id = 'move-counter';
+    counterEl.className = 'counter';
+    counterEl.textContent = 'Moves: 0';
+    grid.appendChild(counterEl);
+    // Create score counter overlay inside the grid
+    const scoreEl = document.createElement('div');
+    scoreEl.id = 'score-counter';
+    scoreEl.className = 'score';
+    scoreEl.textContent = 'Score: 0 / 25';
+    grid.appendChild(scoreEl);
+
+    // Overlay blue tiles that the player can move as a group
+    const overlays = []; // {row, col, spanRows}
+    const overlayEls = [];
+    const placeOverlay = (el, row, col, spanRows) => {
+      el.style.gridColumn = String(col);
+      el.style.gridRow = `${row} / span ${spanRows}`;
+    };
+    const addOverlay = (row, col, spanRows = 1) => {
+      const el = document.createElement('div');
+      el.className = 'blue';
+      grid.appendChild(el);
+      overlays.push({ row, col, spanRows });
+      overlayEls.push(el);
+      placeOverlay(el, row, col, spanRows);
+    };
+
+    // Initial 1x2 blue tile at position (row=1, col=1)
+    addOverlay(1, 1, 2);
+    // Count blue moves to trigger red random movement
+    let movesSinceRed = 0;
+    // Total move counter for display
+    let totalMoves = 0;
+    // Score counting for captured reds
+    let score = 0;
+    const maxScore = 25; // fixed cap regardless of redCount
+    let gameOver = false;
+
+    const canMoveAll = (dx, dy) => {
+      for (const o of overlays) {
+        const newRow = o.row + dy;
+        const newCol = o.col + dx;
+        if (newCol < 1 || newCol > size) return false;
+        const maxRow = o.spanRows === 2 ? size - 1 : size;
+        if (newRow < 1 || newRow > maxRow) return false;
+      }
+      return true;
+    };
+
+    // Move all red base tiles one step in a random allowed direction
+    const moveRedsRandom = () => {
+      const dirs = [
+        { dx: -1, dy: 0 }, // W
+        { dx: 1, dy: 0 },  // E
+        { dx: 0, dy: -1 }, // N
+        { dx: 0, dy: 1 },  // S
+        { dx: 1, dy: -1 }, // NE
+        { dx: -1, dy: 1 }, // SW
+      ];
+      const current = Array.from(redPositions);
+      for (const idx of current) {
+        const r = Math.floor(idx / size) + 1;
+        const c = (idx % size) + 1;
+        const allowed = dirs.filter(d => {
+          const nr = r + d.dy;
+          const nc = c + d.dx;
+          return nr >= 1 && nr <= size && nc >= 1 && nc <= size;
+        });
+        if (allowed.length === 0) continue;
+        const pick = allowed[Math.floor(Math.random() * allowed.length)];
+        const nr = r + pick.dy;
+        const nc = c + pick.dx;
+        const newIdx = (nr - 1) * size + (nc - 1);
+        if (newIdx === idx) continue;
+        // Update classes
+        const src = getCell(r, c);
+        const dst = getCell(nr, nc);
+        src.classList.remove('red');
+        dst.classList.add('red');
+        // Update positions set
+        redPositions.delete(idx);
+        redPositions.add(newIdx);
+      }
+    };
+
+    // Remove any red tiles currently overlapped by blue overlays
+    const removeRedOverlaps = () => {
+      for (const o of overlays) {
+        const positions = o.spanRows === 2
+          ? [ { r: o.row, c: o.col }, { r: o.row + 1, c: o.col } ]
+          : [ { r: o.row, c: o.col } ];
+        for (const pos of positions) {
+          const idx = (pos.r - 1) * size + (pos.c - 1);
+          if (redPositions.has(idx)) {
+            redPositions.delete(idx);
+            const cell = getCell(pos.r, pos.c);
+            cell.classList.remove('red');
+            // Update score and UI
+            if (score < maxScore) {
+              score++;
+              if (score > maxScore) score = maxScore;
+              scoreEl.textContent = `Score: ${score} / ${maxScore}`;
+              if (score >= maxScore) endGame();
+            }
+          }
+        }
+      }
+    };
+
+    const endGame = () => {
+      if (gameOver) return;
+      gameOver = true;
+      const banner = document.createElement('div');
+      banner.className = 'banner';
+      banner.textContent = 'Game Over: Score reached 25';
+      grid.appendChild(banner);
+    };
+
+    const moveAll = (dx, dy) => {
+      if (gameOver) return;
+      if (!canMoveAll(dx, dy)) return;
+      for (let i = 0; i < overlays.length; i++) {
+        overlays[i].row += dy;
+        overlays[i].col += dx;
+        placeOverlay(overlayEls[i], overlays[i].row, overlays[i].col, overlays[i].spanRows);
+      }
+      // Remove any red pixels overlapped by blue after moving
+      removeRedOverlaps();
+      // Update total move counter
+      totalMoves++;
+      counterEl.textContent = `Moves: ${totalMoves}`;
+      // Reds only move after every 5th blue move
+      movesSinceRed++;
+      if (movesSinceRed >= 5) {
+        moveRedsRandom();
+        movesSinceRed = 0;
+      }
+    };
+
+    // Arrow key controls
+    window.addEventListener('keydown', (e) => {
+      if (gameOver) return;
+      let dx = 0, dy = 0;
+      if (e.key === 'ArrowLeft') dx = -1;
+      else if (e.key === 'ArrowRight') dx = 1;
+      else if (e.key === 'ArrowUp') dy = -1;
+      else if (e.key === 'ArrowDown') dy = 1;
+      if (dx !== 0 || dy !== 0) { e.preventDefault(); moveAll(dx, dy); }
+    });
+
+    // Remove any red overlaps at start
+    removeRedOverlaps();
+
+    document.getElementById('app').appendChild(grid);
+  </script>
+</body>
+</html>
